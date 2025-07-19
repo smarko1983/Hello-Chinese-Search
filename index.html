@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Enhanced Chinese Dictionary</title>
+    
+    <!-- PWA Manifest Link -->
+    <link rel="manifest" href="manifest.json">
+    <!-- Theme color for browser UI -->
+    <meta name="theme-color" content="#3b82f6">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Library for fuzzy searching -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
@@ -98,6 +104,17 @@
     </div>
 
     <script>
+        // --- PWA Service Worker Registration ---
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').then(registration => {
+              console.log('ServiceWorker registration successful with scope: ', registration.scope);
+            }, err => {
+              console.log('ServiceWorker registration failed: ', err);
+            });
+          });
+        }
+
         // --- DOM Elements ---
         const mainContent = document.getElementById('main-content');
         const uploadSection = document.getElementById('upload-section');
@@ -206,7 +223,6 @@
                     fileStatus.textContent = `Successfully loaded and saved ${dictionaryData.length} entries.`;
                     fileStatus.classList.remove('text-red-600');
                     fileStatus.classList.add('text-green-600');
-                    // The problematic reload line has been removed. Now we just set up the app.
                     setupApp();
                 } else {
                     fileStatus.textContent = 'Could not parse data. Check file format.';
@@ -219,10 +235,9 @@
             const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
             let currentCategory = '';
             lines.forEach(line => {
-                // Check if the line is a category header
                 if (line.startsWith('//')) {
                     currentCategory = formatCategory(line);
-                    return; // Move to the next line
+                    return;
                 }
                 
                 const parts = line.split(',');
@@ -232,7 +247,7 @@
                         chinese: parts[0].trim(),
                         pinyin: parts[1].trim(),
                         english: parts.slice(2).join(',').trim(),
-                        category: currentCategory // Assign the current category
+                        category: currentCategory
                     };
                     dictionaryData.push(entry);
                 }
