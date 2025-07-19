@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Chinese Dictionary</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Library for fuzzy searching -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        .sort-btn.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .modal-overlay {
+            transition: opacity 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-900">Enhanced Chinese Dictionary</h1>
+            <p id="header-subtitle" class="text-lg text-gray-600 mt-2">Upload your CSV file to begin.</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <div id="main-content" class="hidden">
+            <!-- Search Section -->
+            <div id="search-section" class="bg-white p-6 rounded-xl shadow-md border border-gray-200 mb-6">
+                <label for="search-input" class="block text-lg font-medium text-gray-700 mb-2">Search Your Dictionary</label>
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Search by Pinyin, Chinese, English, or Category..." class="w-full p-4 pl-12 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition">
+                    <svg class="w-6 h-6 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>
+                    <button id="clear-search-btn" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800 hidden text-2xl font-bold">&times;</button>
+                </div>
+            </div>
+
+            <!-- Tabs for History and Favorites -->
+            <div class="flex space-x-2 border-b mb-4">
+                <button id="tab-history" class="py-2 px-4 font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent">Search History</button>
+                <button id="tab-favorites" class="py-2 px-4 font-medium text-gray-600 hover:text-blue-600 border-b-2 border-transparent">Favorites</button>
+            </div>
+
+            <!-- History and Favorites Content -->
+            <div id="history-container" class="bg-white p-4 rounded-lg shadow-sm border mb-6 hidden"></div>
+            <div id="favorites-container" class="bg-white p-4 rounded-lg shadow-sm border mb-6 hidden"></div>
+
+            <!-- Sorting Controls -->
+            <div id="sorting-controls" class="flex items-center justify-between mb-4 hidden">
+                <span class="text-sm font-medium text-gray-600">Sort by:</span>
+                <div class="flex space-x-2">
+                    <button data-sort="relevance" class="sort-btn active text-sm py-1 px-3 rounded-full bg-gray-200 hover:bg-gray-300 transition">Relevance</button>
+                    <button data-sort="pinyin" class="sort-btn text-sm py-1 px-3 rounded-full bg-gray-200 hover:bg-gray-300 transition">Pinyin (A-Z)</button>
+                    <button data-sort="length" class="sort-btn text-sm py-1 px-3 rounded-full bg-gray-200 hover:bg-gray-300 transition">Word Length</button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <main id="results-container" class="space-y-4"></main>
+        </div>
+
+        <!-- File Upload Section -->
+        <div id="upload-section" class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+            <label for="csv-file-input" class="block text-lg font-medium text-gray-700 mb-2">Upload New Dictionary</label>
+            <input type="file" id="csv-file-input" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"/>
+            <p id="file-status" class="text-sm text-gray-500 mt-3">Select a CSV file to get started or load a new one.</p>
+            <button id="clear-dictionary-btn" class="mt-4 w-full py-2 px-4 bg-red-500 text-white rounded-lg hover:bg-red-600 transition hidden">Clear Saved Dictionary</button>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmation-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-sm text-center">
+            <h3 id="modal-title" class="text-lg font-bold text-gray-900 mb-2">Are you sure?</h3>
+            <p id="modal-message" class="text-gray-600 mb-6">This action cannot be undone.</p>
+            <div class="flex justify-center space-x-4">
+                <button id="modal-cancel-btn" class="py-2 px-6 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">Cancel</button>
+                <button id="modal-confirm-btn" class="py-2 px-6 bg-red-600 text-white rounded-lg hover:bg-red-700">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const mainContent = document.getElementById('main-content');
+        const uploadSection = document.getElementById('upload-section');
+        const fileInput = document.getElementById('csv-file-input');
+        const fileStatus = document.getElementById('file-status');
+        const clearDictionaryBtn = document.getElementById('clear-dictionary-btn');
+        const searchInput = document.getElementById('search-input');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+        const resultsContainer = document.getElementById('results-container');
+        const headerSubtitle = document.getElementById('header-subtitle');
+        const sortingControls = document.getElementById('sorting-controls');
+        const tabHistory = document.getElementById('tab-history');
+        const tabFavorites = document.getElementById('tab-favorites');
+        const historyContainer = document.getElementById('history-container');
+        const favoritesContainer = document.getElementById('favorites-container');
+        const confirmationModal = document.getElementById('confirmation-modal');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+        // --- State ---
+        let dictionaryData = [];
+        let favorites = [];
+        let searchHistory = [];
+        let fuse;
+        let currentSort = 'relevance';
+        let lastResults = [];
+        let confirmAction = null;
+
+        // --- Pinyin Conversion Data ---
+        const pinyinToneMap = { 'a': 'āáǎàa', 'e': 'ēéěèe', 'i': 'īíǐìi', 'o': 'ōóǒòo', 'u': 'ūúǔùu', 'ü': 'ǖǘǚǜü' };
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', init);
+
+        function init() {
+            const savedData = localStorage.getItem('dictionaryData');
+            const savedFavorites = localStorage.getItem('favoriteWords');
+            const savedHistory = localStorage.getItem('searchHistory');
+
+            if (savedData) {
+                dictionaryData = JSON.parse(savedData);
+                if (dictionaryData.length > 0) setupApp();
+            }
+            if (savedFavorites) favorites = JSON.parse(savedFavorites);
+            if (savedHistory) searchHistory = JSON.parse(savedHistory);
+
+            renderHistory();
+            renderFavorites();
+            addEventListeners();
+        }
+
+        function setupApp() {
+            fuse = new Fuse(dictionaryData, {
+                keys: ['chinese', 'pinyin', 'english', 'category'],
+                includeScore: true,
+                threshold: 0.4,
+                ignoreLocation: true,
+            });
+            mainContent.classList.remove('hidden');
+            uploadSection.classList.add('mt-8');
+            clearDictionaryBtn.classList.remove('hidden');
+            headerSubtitle.textContent = `Dictionary loaded with ${dictionaryData.length} entries.`;
+        }
+        
+        function addEventListeners() {
+            fileInput.addEventListener('change', handleFileUpload);
+            clearDictionaryBtn.addEventListener('click', () => {
+                showConfirmation("Are you sure you want to clear the saved dictionary?", clearDictionary);
+            });
+            searchInput.addEventListener('input', handleSearch);
+            clearSearchBtn.addEventListener('click', clearSearch);
+            tabHistory.addEventListener('click', () => toggleTab('history'));
+            tabFavorites.addEventListener('click', () => toggleTab('favorites'));
+            sortingControls.addEventListener('click', (e) => {
+                if (e.target.matches('.sort-btn')) {
+                    currentSort = e.target.dataset.sort;
+                    document.querySelectorAll('.sort-btn').forEach(btn => btn.classList.remove('active'));
+                    e.target.classList.add('active');
+                    displayResults(lastResults);
+                }
+            });
+            modalCancelBtn.addEventListener('click', hideConfirmation);
+            modalConfirmBtn.addEventListener('click', () => {
+                if (typeof confirmAction === 'function') {
+                    confirmAction();
+                }
+                hideConfirmation();
+            });
+        }
+        
+        // --- Data Handling ---
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            if (!file.name.endsWith('.csv')) {
+                fileStatus.textContent = 'Error: Please upload a valid .csv file.';
+                fileStatus.classList.add('text-red-600');
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                dictionaryData = [];
+                parseCSV(e.target.result);
+                if (dictionaryData.length > 0) {
+                    localStorage.setItem('dictionaryData', JSON.stringify(dictionaryData));
+                    fileStatus.textContent = `Successfully loaded and saved ${dictionaryData.length} entries.`;
+                    fileStatus.classList.remove('text-red-600');
+                    fileStatus.classList.add('text-green-600');
+                    // The problematic reload line has been removed. Now we just set up the app.
+                    setupApp();
+                } else {
+                    fileStatus.textContent = 'Could not parse data. Check file format.';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
+            let currentCategory = '';
+            lines.forEach(line => {
+                // Check if the line is a category header
+                if (line.startsWith('//')) {
+                    currentCategory = formatCategory(line);
+                    return; // Move to the next line
+                }
+                
+                const parts = line.split(',');
+                if (parts.length >= 3) {
+                    const entry = {
+                        id: `${parts[0].trim()}|${parts[1].trim()}`,
+                        chinese: parts[0].trim(),
+                        pinyin: parts[1].trim(),
+                        english: parts.slice(2).join(',').trim(),
+                        category: currentCategory // Assign the current category
+                    };
+                    dictionaryData.push(entry);
+                }
+            });
+        }
+
+        function clearDictionary() {
+            localStorage.removeItem('dictionaryData');
+            localStorage.removeItem('favoriteWords');
+            localStorage.removeItem('searchHistory');
+            window.location.reload();
+        }
+
+        // --- Search Logic ---
+        function handleSearch() {
+            const query = searchInput.value.trim();
+            clearSearchBtn.classList.toggle('hidden', query.length === 0);
+            sortingControls.classList.toggle('hidden', query.length === 0);
+
+            if (query.length < 1) {
+                resultsContainer.innerHTML = '';
+                lastResults = [];
+                return;
+            }
+            
+            if (query.length > 2) addToHistory(query);
+            
+            const fuseResults = fuse.search(query).map(result => result.item);
+            lastResults = fuseResults;
+            displayResults(fuseResults);
+        }
+
+        function clearSearch() {
+            searchInput.value = '';
+            resultsContainer.innerHTML = '';
+            clearSearchBtn.classList.add('hidden');
+            sortingControls.classList.add('hidden');
+            lastResults = [];
+        }
+
+        // --- History & Favorites ---
+        function addToHistory(query) {
+            const lowerQuery = query.toLowerCase();
+            searchHistory = searchHistory.filter(item => item.toLowerCase() !== lowerQuery);
+            searchHistory.unshift(query);
+            if (searchHistory.length > 10) searchHistory.pop();
+            localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+            renderHistory();
+        }
+
+        function toggleFavorite(entryId) {
+            const index = favorites.findIndex(fav => fav.id === entryId);
+            if (index > -1) {
+                favorites.splice(index, 1);
+            } else {
+                const entry = dictionaryData.find(item => item.id === entryId);
+                if (entry) favorites.unshift(entry);
+            }
+            localStorage.setItem('favoriteWords', JSON.stringify(favorites));
+            displayResults(lastResults);
+            renderFavorites();
+        }
+
+        // --- Rendering ---
+        function displayResults(results) {
+            resultsContainer.innerHTML = '';
+            if (results.length === 0) {
+                resultsContainer.innerHTML = `<div class="text-center bg-white p-6 rounded-lg shadow-sm border"><h3 class="text-lg font-medium">No Results Found</h3><p class="text-gray-500">Try a different search term.</p></div>`;
+                return;
+            }
+
+            const sortedResults = [...results].sort((a, b) => {
+                if (currentSort === 'pinyin') return a.pinyin.localeCompare(b.pinyin);
+                if (currentSort === 'length') return a.chinese.replace(/\[.*?\]/g, '').length - b.chinese.replace(/\[.*?\]/g, '').length;
+                return 0;
+            });
+
+            sortedResults.forEach(item => {
+                const resultElement = document.createElement('div');
+                resultElement.className = 'fade-in bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex justify-between items-start';
+                const pinyinWithTones = convertPinyin(item.pinyin);
+                const isFav = favorites.some(fav => fav.id === item.id);
+                
+                let categoryHTML = '';
+                if (item.category) {
+                    categoryHTML = `<div class="mt-3"><span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">${item.category}</span></div>`;
+                }
+
+                resultElement.innerHTML = `
+                    <div>
+                        <div class="mb-2">
+                            <h2 class="text-2xl font-semibold text-gray-800">${highlightMatch(item.chinese, searchInput.value)}</h2>
+                            <p class="text-md text-blue-600">${pinyinWithTones}</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-700 leading-relaxed">${highlightMatch(item.english, searchInput.value)}</p>
+                        </div>
+                        ${categoryHTML}
+                    </div>
+                    <button class="favorite-btn p-2 rounded-full hover:bg-yellow-100 flex-shrink-0" data-id="${item.id}" title="Add to favorites">
+                        <svg class="w-6 h-6 ${isFav ? 'text-yellow-400 fill-current' : 'text-gray-400'}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+                    </button>
+                `;
+                resultsContainer.appendChild(resultElement);
+            });
+            
+            document.querySelectorAll('.favorite-btn').forEach(btn => {
+                btn.addEventListener('click', () => toggleFavorite(btn.dataset.id));
+            });
+        }
+
+        function renderHistory() {
+            historyContainer.innerHTML = '<h3 class="font-semibold mb-2 text-gray-700">Recent Searches</h3>';
+            if (searchHistory.length === 0) {
+                historyContainer.innerHTML += '<p class="text-sm text-gray-500">No recent searches.</p>';
+                return;
+            }
+            const list = document.createElement('div');
+            list.className = 'flex flex-wrap gap-2';
+            searchHistory.forEach(term => {
+                const item = document.createElement('button');
+                item.className = 'text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 py-1 px-3 rounded-full transition';
+                item.textContent = term;
+                item.onclick = () => { searchInput.value = term; handleSearch(); };
+                list.appendChild(item);
+});
+            historyContainer.appendChild(list);
+        }
+
+        function renderFavorites() {
+            favoritesContainer.innerHTML = '<h3 class="font-semibold mb-2 text-gray-700">Favorite Words</h3>';
+            if (favorites.length === 0) {
+                favoritesContainer.innerHTML += '<p class="text-sm text-gray-500">Star a word to save it here.</p>';
+                return;
+            }
+            const list = document.createElement('div');
+            list.className = 'space-y-3';
+            favorites.forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'p-3 bg-gray-50 rounded-md flex justify-between items-center';
+                let categoryHTML = item.category ? `<p class="text-xs text-blue-500">${item.category}</p>` : '';
+                itemEl.innerHTML = `
+                    <div>
+                        <p class="font-medium">${item.chinese}</p>
+                        <p class="text-sm text-gray-600">${convertPinyin(item.pinyin)}</p>
+                        ${categoryHTML}
+                    </div>
+                    <button class="text-sm text-blue-600 hover:underline" onclick="searchInput.value='${item.chinese}'; handleSearch();">View</button>
+                `;
+                list.appendChild(itemEl);
+            });
+            favoritesContainer.appendChild(list);
+        }
+        
+        function toggleTab(tabName) {
+            const isHistory = tabName === 'history';
+            historyContainer.classList.toggle('hidden', !isHistory);
+            favoritesContainer.classList.toggle('hidden', isHistory);
+            tabHistory.classList.toggle('border-blue-500', isHistory);
+            tabHistory.classList.toggle('text-blue-600', isHistory);
+            tabHistory.classList.toggle('border-transparent', !isHistory);
+            tabFavorites.classList.toggle('border-blue-500', !isHistory);
+            tabFavorites.classList.toggle('text-blue-600', !isHistory);
+            tabFavorites.classList.toggle('border-transparent', isHistory);
+        }
+
+        // --- Modal Functions ---
+        function showConfirmation(message, onConfirm) {
+            document.getElementById('modal-message').textContent = message;
+            confirmAction = onConfirm;
+            confirmationModal.classList.remove('hidden');
+        }
+
+        function hideConfirmation() {
+            confirmAction = null;
+            confirmationModal.classList.add('hidden');
+        }
+
+        // --- Utility Functions ---
+        function formatCategory(categoryString) {
+            return categoryString.replace(/\/\//g, '').replace(/\//g, ' > ').trim();
+        }
+
+        function convertPinyin(pinyinWithNumbers) {
+            const syllables = pinyinWithNumbers.toLowerCase().match(/[a-z]+[1-5]/g);
+            if (!syllables) return pinyinWithNumbers;
+            return syllables.map(syllable => {
+                const tone = parseInt(syllable.slice(-1));
+                let letters = syllable.slice(0, -1);
+                if (tone === 5) return letters;
+                let vowelIndex = letters.indexOf('a');
+                if (vowelIndex === -1) vowelIndex = letters.indexOf('e');
+                if (vowelIndex === -1) vowelIndex = letters.indexOf('ou') > -1 ? letters.indexOf('o') : -1;
+                if (vowelIndex === -1) {
+                    for (let i = letters.length - 1; i >= 0; i--) {
+                        if ('iouü'.includes(letters[i])) { vowelIndex = i; break; }
+                    }
+                }
+                if (vowelIndex !== -1) {
+                    const originalVowel = letters[vowelIndex];
+                    const tonedVowel = pinyinToneMap[originalVowel]?.[tone - 1] || originalVowel;
+                    return letters.substring(0, vowelIndex) + tonedVowel + letters.substring(vowelIndex + 1);
+                }
+                return letters;
+            }).join(' ');
+        }
+
+        function highlightMatch(text, query) {
+            if (!query) return text;
+            const regex = new RegExp(`(${query.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<mark class="bg-yellow-200 text-black rounded px-1">$1</mark>');
+        }
+    </script>
+</body>
+</html>
